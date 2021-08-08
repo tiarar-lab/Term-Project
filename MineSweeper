@@ -1,0 +1,249 @@
+import random, copy
+from cmu_112_graphics import *
+
+def appStarted(app):
+    # canvas variables
+    app.topMargin = 80
+    app.margin = 10
+    app.rows = 9
+    app.cols = 9
+
+    # set up the board of mine values
+    app.numMines = app.rows*1.5
+    app.board = resetBoard(app)
+    distributeMines(app)
+    # make mines X
+    changeToX(app.board)
+    # getting adjacent Xs
+    app.board = mineSweeper(app.board)
+
+    # set up the view/not view state of each cell
+    app.view = []
+    resetViewBoard(app)
+ 
+    # color of each cell
+    app.boardColors = []
+    app.viewColors = []
+    app.grassColors = ["springgreen", "limegreen"]
+    app.mineColors = ["dodgerblue", "salmon", "violetred", "yellow2", "thistle1"]
+    resetColorsBoard(app)
+
+    # some counter varibles
+    app.timer = 0
+    app.moves = 0
+
+    # state of the game variables
+    app.win = False
+    app.gameOver = False
+
+# resets app.board to size of grid
+def resetBoard(app):
+    app.board = []
+    for row in range(app.rows):
+        newRow = []
+        for col in range(app.cols):
+            newRow += [0]
+        app.board.append(newRow)
+    return app.board
+
+# resets app.view to size of grid
+def resetViewBoard(app):
+   for row in range(app.rows):
+        newR = []
+        for col in range(app.cols):
+            newR += [False]
+        app.view.append(newR)
+
+# resets and randomizes cell colors
+def resetColorsBoard(app):
+    # create board colors
+    for row in range(app.rows):
+        newR = []
+        for col in range(app.cols):
+            newR += "khaki"
+        app.boardColors.append(newR)
+
+    # create view colors
+    for row in range(app.rows):
+        newR = []
+        for col in range(app.cols):
+            newR += "springgreen"
+        app.viewColors.append(newR)
+
+    # set to the proper randomized state
+    for row in range(app.rows):
+        for col in range(app.cols):
+            if app.board[row][col] == "X":
+                app.boardColors[row][col] = random.choice(app.mineColors)
+
+    for row in range(app.rows):
+        for col in range(app.cols):
+            app.viewColors[row][col] = random.choice(app.grassColors)
+
+# distributes mines along random cells in app.board
+def distributeMines(app):
+    count = app.numMines
+    while(count>=-2):
+        randRow = random.randint(0,app.rows-1)
+        randCol = random.randint(0,app.cols-1)
+        if ((app.rows)/2-1<=randRow<=(app.rows)/2+1):
+            continue
+        elif ((app.cols)/2-1<=randCol<=(app.cols)/2+1):
+            continue
+        app.board[randRow][randCol] = 1
+        count-=1
+
+def changeToX(L):
+    for row in range(len(L)):
+        for col in range(len(L[0])):
+            if L[row][col] == 1:
+                L[row][col] = "X"
+    return L
+
+def newVal(L, startRow, startCol):
+    count = 0
+    for drow in [-1, 0, 1]:
+        for dcol in [-1, 0, 1]:
+            newR = startRow+drow
+            newC = startCol+dcol
+            if 0<=newR<len(L) and 0<=newC<len(L[0]) and L[newR][newC] == "X":
+                count+=1
+    return count
+
+def mineSweeper(L):
+    newL = copy.deepcopy(L)
+    newL = changeToX(newL)
+    for row in range(len(L)):
+        for col in range(len(L[0])):
+            if newL[row][col] != "X":
+                newL[row][col] = newVal(newL, row, col)
+    return newL
+
+def mousePressed(app, event):
+    if app.gameOver: 
+        return
+    (clickR, clickC) = getCell(app, event.x, event.y)
+    if app.view[clickR][clickR] == False:
+        app.moves+=1
+
+    app.view[clickR][clickC] = True
+    if (app.board[clickR][clickC] == "X"):
+        app.gameOver = True
+    viewNearbyCells(app, clickR, clickC)
+    app.win = checkForWin(app)
+    if app.win: 
+        app.gameOver = True
+
+def viewNearbyCells(app, startRow, startCol):
+    for drow in [-1, 0, 1]:
+        for dcol in [-1, 0, 1]:
+            newR = startRow+drow
+            newC = startCol+dcol
+            if 0<=newR<len(app.board) and 0<=newC<len(app.board[0]) and (app.board[newR][newC] == 0 or app.board[newR][newC] == 1):
+                app.view[newR][newC] = True
+
+def checkForWin(app):
+    for row in range(app.rows):
+        for col in range(app.cols):
+            if app.view[row][col] == False:
+                if app.board[row][col] != "X":
+                    return False
+    return True
+
+def gameOverShowMine(app):
+    if app.gameOver:
+        for row in range(app.rows):
+            for col in range(app.cols):
+                if app.view[row][col] == False and app.board[row][col] == "X":
+                    app.view[row][col] = True
+                    return
+
+def keyPressed(app, event):
+    if event.key == "r":
+        appStarted(app)
+    elif event.key == "v":
+        viewAllPieces(app)
+    if event.key == "w":
+        app.win = True
+        viewAllPieces(app)
+        app.gameOver = True
+
+def viewAllPieces(app):
+    for row in range(app.rows):
+        for col in range(app.cols):
+            app.view[row][col] = True
+
+def timerFired(app):
+    if app.gameOver:
+        gameOverShowMine(app) 
+        return 
+    app.timer+=0.1
+
+def getCell(app, x, y):
+    cellWidth = (app.width-2*app.margin) / app.cols
+    cellHeight = (app.height-app.topMargin-app.margin) / app.rows
+
+    col = int((x-app.margin)//cellWidth)
+    row = int((y-app.topMargin)//cellHeight)
+
+    return row, col
+
+def getCellBounds(app, row, col):
+    cellWidth = (app.width-2*app.margin) / app.cols
+    cellHeight = (app.height-app.topMargin-app.margin) / app.rows
+
+    x0 = app.margin + col*cellWidth
+    x1 = app.margin + (col+1)*cellWidth
+    y0 = app.topMargin + row*cellHeight
+    y1 = app.topMargin + (row+1)*cellHeight
+
+    return x0, y0, x1, y1
+
+def drawCount(app, canvas):
+    for row in range(app.rows):
+        for col in range(app.cols):
+            (x0, y0, x1, y1) = getCellBounds(app, row, col)
+            if (app.board[row][col] == "X"):
+                canvas.create_text((x1+x0)/2, (y1+y0)/2, text="X", font="Arial 15 bold")
+            else:
+                if app.board[row][col] != 0:
+                    canvas.create_text((x1+x0)/2, (y1+y0)/2, text=app.board[row][col], font="Arial 15 bold")
+
+def redrawAll(app, canvas):
+    canvas.create_rectangle(0, 0, app.width, app.height, fill="lightcyan")
+    drawGrid(app, canvas)
+    drawCount(app, canvas)
+    drawViewCell(app, canvas)
+    drawTopInfo(app, canvas)
+    drawGameOver(app, canvas)
+
+def drawViewCell(app, canvas):
+    for row in range(app.rows):
+        for col in range(app.cols):
+            (x0, y0, x1, y1) = getCellBounds(app, row, col)
+            if (app.view[row][col] == False):
+                canvas.create_rectangle(x0, y0, x1, y1, fill=app.viewColors[row][col])
+
+def drawGrid(app, canvas):
+    for row in range(app.rows):
+        for col in range(app.cols):
+            (x0, y0, x1, y1) = getCellBounds(app, row, col)
+            if (app.board[row][col] == "X"):
+                canvas.create_rectangle(x0, y0, x1, y1, fill=app.boardColors[row][col])
+            else:
+                canvas.create_rectangle(x0, y0, x1, y1, fill="khaki")
+
+def drawTopInfo(app, canvas):
+    canvas.create_text(app.width*1/4, app.topMargin/2, text=f'Mines: {int(app.numMines)}', font="Arial 20 bold")
+    canvas.create_text(app.width/2, app.topMargin/2, text=f'Moves: {int(app.moves)}', font="Arial 20 bold")
+    canvas.create_text(app.width*3/4, app.topMargin/2, text=f'Time: {int(app.timer)}', font="Arial 20 bold")
+
+def drawGameOver(app, canvas):
+    if app.gameOver and app.win:
+        canvas.create_rectangle(app.width/2-90, app.height/2-30, app.width/2+90, app.height/2+30, fill="orange")
+        canvas.create_text(app.width/2, app.height/2, text="You Win", font="Arial 30 bold")
+    elif app.gameOver and not app.win:
+        canvas.create_rectangle(app.width/2-90, app.height/2-30, app.width/2+90, app.height/2+30, fill="orange")
+        canvas.create_text(app.width/2, app.height/2, text="Game Over!", font="Arial 30 bold")
+
+runApp(width=600, height=600)
