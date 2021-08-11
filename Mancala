@@ -1,0 +1,562 @@
+import random, copy, math
+from cmu_112_graphics import *
+
+def appStarted(app):
+    # board variables
+    app.board = [[0],[[4, 4, 4, 4, 4, 4], 
+                     [4, 4, 4, 4, 4, 4]], [0]]
+    app.margin = 10
+    app.homeBoardWidth = app.width/8
+    app.homeBoardHeight = app.height/6
+
+    # current player is 1 or 2, where the computer can be 2
+    app.currentPlayer = 1
+    app.player1MadeTurn = False
+    app.player2MadeTurn = False
+    app.selectR = -1
+    app.selectC = -1
+    
+    # game variables relating to moving the pebbles
+    app.orginalNumPebbles = -1
+    app.currNumPebbles = -1
+
+    # states of the game varibles
+    app.illegalRowClick = False
+    app.zeroCellClick = False
+    app.takeAnotherTurn = False
+    app.playInProgress = False
+    app.gameOver = False
+    app.winner = None
+    app.timerDelay = 500
+
+    # terms relating to computer mode
+    app.inComputerMode = False
+
+def keyPressed(app, event):
+    # restart
+    if event.key == "r":
+        appStarted(app)
+    elif app.gameOver: return
+    # automatically end game
+    elif event.key == "w":
+        app.gameOver = True
+    # switch to computer mode
+    elif event.key == "c":
+        app.inComputerMode = True
+
+def getCell(app, x, y):
+    cellsWidthStart = app.homeBoardWidth+app.margin 
+    cellsWidthEnd = app.width-app.margin-app.homeBoardWidth
+
+    cellsHeightStart = app.height/2
+    cellsHeightEnd = app.height/2+app.homeBoardHeight
+
+    cellWidth = (cellsWidthEnd-cellsWidthStart)/6
+    cellHeight = (cellsHeightEnd-cellsHeightStart)/2   
+
+    col = int((x-cellsWidthStart)/cellWidth)
+    row = int((y-cellsHeightStart)/cellHeight)
+
+    return (row, col)
+
+def mousePressed(app, event):
+    # ignore mouses pressess
+    if app.gameOver or app.playInProgress or (app.inComputerMode and app.currentPlayer == 2): 
+        return
+
+    # only allowing one extra turn
+    if app.takeAnotherTurn:
+        app.takeAnotherTurn = False
+    
+    # waiting for player 1 to interact
+    if app.currentPlayer == 1:
+        app.player1MadeTurn = True
+        (app.selectR, app.selectC) = getCell(app, event.x, event.y)
+        if not 0<=app.selectR<2 and 0<=app.selectC<6: 
+            app.player1MadeTurn = app.player2MadeTurn = False
+            return
+        app.originalNumPebbles = app.currNumPebbles = app.board[1][app.selectR][app.selectC] 
+
+    # waiting for player 2 to interact
+    elif app.currentPlayer == 2:
+        app.player2MadeTurn = True
+        (app.selectR, app.selectC) = getCell(app, event.x, event.y)
+        if not 0<=app.selectR<2 and 0<=app.selectC<6: 
+            app.player1MadeTurn = app.player2MadeTurn = False
+            return       
+        app.originalNumPebbles = app.currNumPebbles = app.board[1][app.selectR][app.selectC] 
+
+def computerMode(app):
+    if app.inComputerMode and app.currentPlayer == 2:
+        app.player2MadeTurn = True
+        app.selectR = 0
+        # first check the easiest and smartest guess
+        if simpleSmartGuess(app) != -1:
+            app.selectC = simpleSmartGuess(app)
+        # then i will put more complex guesses here
+        elif app.board[1][0][complexSmartGuess(app)] != 0:
+            app.selectC = complexSmartGuess(app)
+        # finally, if no good guesses can be made it will just choose random
+        else:
+            app.selectC = random.randint(0, 5)
+        if app.takeAnotherTurn or app.zeroCellClick:
+            app.selectC = random.randint(0, 5)
+        app.originalNumPebbles = app.currNumPebbles = (app.board[1]
+                                            [app.selectR][app.selectC])
+
+def simpleSmartGuess(app):
+    # easy move to guarantee another turn
+    chosenCol = -1
+    currRow = app.board[1][0]
+    for i in range(len(currRow)):
+        if currRow[i] == i+1:
+            chosenCol = i
+    return chosenCol
+
+def complexSmartGuess(app):
+    # pos player = computer
+    board = copy.deepcopy(app.board)
+    val, col = minmax(board, 3, 10, 15)
+    return col 
+
+# minmax function formatting inspired by 
+# https://www.youtube.com/watch?v=fInYh90YMJU&t=607s
+def minmax(board, depth, player, bestCol):
+    if depth == 0:
+        return evaluateBoard(board), -1
+    
+    else:
+        best = 100000*-player
+        for col in range(6):
+            newBoard, newPlayer = makeMove(board, player, col)
+            (val, bestCol) = minmax(newBoard, depth-1, newPlayer, bestCol)
+            # trying to maximize result
+            if player>0 and val>best:
+                bestCol = col
+                best = val
+            elif player<0 and val<best:
+                bestCol = col
+                best = val
+        print(bestCol)
+        return best, bestCol
+
+def makeMove(board, player, col):
+    # pos is computer, neg is user
+    if player>0: # computer's turn
+        newBoard = player2Move(board, col)
+        newPlayer = -10 # switch to user
+    else: # user's turn
+        newBoard = player1Move(board, col)
+        newPlayer = 10 # switch to computer
+    return newBoard, newPlayer
+
+def evaluateBoard(board):
+    # if computer wins, return pos infinity
+    if board[0][0]>24:
+        return math.inf
+    # if user wins, return neg infinity
+    elif board[2][0]>24:
+        return math.inf
+    # else return a score: comps' home - user's home
+    return board[0][0]-board[2][0]
+
+# need help accounting for another turn here
+def player1Move(board, col):
+    originalNumPebbles = board[1][1][col]
+    newBoard = copy.deepcopy(board)
+    newBoard[1][1][col] = 0
+    anotherTurn = False
+
+    for i in range(originalNumPebbles):
+        numberMove = i+1
+        newR = 1
+        newC = col+numberMove
+        # newC is on the player's original row
+        if 0<=newR<2 and 0<=(newC%13)<6:
+            movePebbleDestructive(newBoard, newR, newC%13)
+
+        # distribute to (0, 0)
+        elif (newC%12) == 0:
+            wrapR = 0
+            wrapC = 0
+            movePebbleDestructive(newBoard, wrapR, wrapC)
+        
+        # to user's mancala
+        elif (newC%6) == 0:
+            moveToPlayer1HomeDestructive(newBoard)
+            # last pebble
+            if i == originalNumPebbles-1:
+                anotherTurn = True
+
+        # on the computer's side of the board
+        elif (newC%12)>6:
+            wrapR = 0
+            wrapC = 6-(newC%6)
+            movePebbleDestructive(newBoard, wrapR, wrapC)
+
+     # when i is zero it should stop because all proper changes were made to 
+     # the newBoard
+    return newBoard
+
+# need help accounting for another turn here
+def player2Move(board, col):
+    originalNumPebbles = board[1][0][col]
+    newBoard = copy.deepcopy(board)
+    newBoard[1][0][col] = 0
+    anotherTurn = False
+
+    for i in range(originalNumPebbles):
+        numberMove = i+1
+        newR = 0
+        newC = col-numberMove
+        # newC is on the player's original row
+        if 0<=newR<2 and 0<=(newC%13)<6:
+            movePebbleDestructive(newBoard, newR, newC%13)
+
+        # distribute to (0, 0)
+        elif (newC%12) == 0:
+            wrapR = 0
+            wrapC = 0
+            movePebbleDestructive(newBoard, wrapR, wrapC)
+        
+        # to computer's mancala
+        elif newC==-1:
+            moveToPlayer2HomeDestructive(newBoard)
+            # last pebble
+            if i == originalNumPebbles-1:
+                anotherTurn = True
+
+        # on the user's side of the board
+        elif newC<0:
+            wrapR = 1
+            wrapC = abs(newC)%(6) - 2
+            movePebbleDestructive(newBoard, wrapR, wrapC)
+
+     # when i is zero it should stop because all proper changes were made 
+     # to the newBoard
+    return newBoard
+
+def movePebbleDestructive(board, newR, newC):
+    board[1][newR][newC]+=1
+
+def moveToPlayer1HomeDestructive(board):
+    board[2][0]+=1
+
+def moveToPlayer2HomeDestructive(board):
+    board[0][0]+=1
+
+def movePebble(app, board, newR, newC):
+    # move one pebble from startR startC to newR newC
+    app.currNumPebbles-=1
+    board[1][newR][newC]+=1
+
+def moveToPlayer1Home(app, board):
+    # drop a pebble in the player 1's mancala
+    app.currNumPebbles-=1
+    board[2][0]+=1
+    if app.currNumPebbles == 0:
+        app.takeAnotherTurn = True
+
+def moveToPlayer2Home(app, board):
+    # drop a pebble in the player 2's mancala
+    app.currNumPebbles-=1
+    board[0][0]+=1
+    if app.currNumPebbles == 0:
+        app.takeAnotherTurn = True
+
+def takeTurnPlayer1(app, startR, startC):
+    app.playInProgress = True
+    # check for zero cell
+    if app.originalNumPebbles == 0:
+        app.zeroCellClick = True
+        app.playInProgress = False
+        return
+    app.zeroCellClick = False
+    
+    # player must click in proper row
+    if startR != 1: 
+        app.illegalRowClick = True
+        app.playInProgress = False
+        return
+
+    # ignore futher movement if waiting for player to take another turn
+    if app.takeAnotherTurn:
+        app.playInProgress = False
+        return
+
+    app.illegalRowClick = False
+    if app.currNumPebbles == 0 and not app.takeAnotherTurn:
+        app.playInProgress = False
+        app.selectR = -1
+        app.selectC = -1
+        app.player1MadeTurn = False
+        app.currentPlayer = 2
+        if app.inComputerMode:
+            computerMode(app)
+        return
+    if app.currentPlayer == 1:
+        numberMove = app.originalNumPebbles - (app.currNumPebbles-1)
+        newR = 1
+        newC = startC+numberMove
+        app.board[1][startR][startC]=0
+        if 0<=newR<2 and 0<=(newC%13)<6 and app.currNumPebbles>=0:
+            movePebble(app, app.board, newR, newC%13)
+        elif (newC%12) == 0 and app.currNumPebbles>=0:
+            wrapR = 0
+            wrapC = 0
+            movePebble(app, app.board, wrapR, wrapC)
+        elif (newC%6) == 0 and app.currNumPebbles>=0:
+            moveToPlayer1Home(app, app.board)
+        elif (newC%12)>6 and app.currNumPebbles>=0:
+            wrapR = 0
+            wrapC = 6-(newC%6)
+            movePebble(app, app.board, wrapR, wrapC)
+
+def takeTurnPlayer2(app, startR, startC):
+    app.playInProgress = True
+    if app.originalNumPebbles == 0:
+        app.zeroCellClick = True
+        app.playInProgress = False
+        if app.inComputerMode:
+            computerMode(app)
+            app.zeroCellClick = False
+        return
+    app.zeroCellClick = False
+    if startR != 0: 
+        app.illegalRowClick = True
+        app.playInProgress = False
+        return
+
+    if app.inComputerMode and app.takeAnotherTurn:
+        computerMode(app)
+        app.takeAnotherTurn = False
+
+    if app.takeAnotherTurn:
+        app.playInProgress = False
+        return
+    app.illegalRowClick = False
+    if app.currNumPebbles == 0 and not app.takeAnotherTurn:
+        app.playInProgress = False
+        app.selectR = -1
+        app.selectC = -1
+        app.player2MadeTurn = False
+        app.currentPlayer = 1
+        return
+    if app.currentPlayer == 2:
+        numberMove = app.originalNumPebbles - (app.currNumPebbles-1)
+        newR = 0
+        newC = startC-numberMove
+        app.board[1][startR][startC]=0
+        if 0<=newR<2 and 0<=(newC%13)<6 and app.currNumPebbles>=0:
+            movePebble(app, app.board, newR, newC%13)
+        elif (newC%12) == 0 and app.currNumPebbles>=0:
+            wrapR = 0
+            wrapC = 0
+            movePebble(app, app.board, wrapR, wrapC)
+        elif newC==-1 and app.currNumPebbles>=0:
+            moveToPlayer2Home(app, app.board)
+        elif newC<0 and app.currNumPebbles>=0:
+            wrapR = 1
+            wrapC = abs(newC)%(6) - 2
+            movePebble(app, app.board, wrapR, wrapC)
+
+def predictTakeTurn1(app, startR, startC):
+    if app.takeAnotherTurn:
+        computerMode(app)
+        app.takeAnotherTurn = False
+
+    if app.currNumPebbles == 0 and not app.takeAnotherTurn:
+        app.selectR = -1
+        app.selectC = -1
+        return
+
+    numberMove = app.originalNumPebbles - (app.currNumPebbles-1)
+    newR = 1
+    newC = startC+numberMove
+    app.predictBoard[1][startR][startC]=0
+    if 0<=newR<2 and 0<=(newC%13)<6 and app.currNumPebbles>=0:
+        movePebble(app, app.predictBoard, newR, newC%13)
+    elif (newC%12) == 0 and app.currNumPebbles>=0:
+        wrapR = 0
+        wrapC = 0
+        movePebble(app, app.predictBoard, wrapR, wrapC)
+    elif (newC%6) == 0 and app.currNumPebbles>=0:
+        moveToPlayer1Home(app, app.predictBoard)
+    elif (newC%12)>6 and app.currNumPebbles>=0:
+        wrapR = 0
+        wrapC = 6-(newC%6)
+        movePebble(app, app.predictBoard, wrapR, wrapC)
+
+def predictTakeTurn2(app, startR, startC):
+    if app.takeAnotherTurn:
+        computerMode(app)
+        app.takeAnotherTurn = False
+
+    if app.currNumPebbles == 0 and not app.takeAnotherTurn:
+        app.selectR = -1
+        app.selectC = -1
+        return
+
+    numberMove = app.originalNumPebbles - (app.currNumPebbles-1)
+    newR = 0
+    newC = startC-numberMove
+    app.predictBoard[1][startR][startC]=0
+    if 0<=newR<2 and 0<=(newC%13)<6 and app.currNumPebbles>=0:
+        movePebble(app, app.predictBoard, newR, newC%13)
+    elif (newC%12) == 0 and app.currNumPebbles>=0:
+        wrapR = 0
+        wrapC = 0
+        movePebble(app, app.predictBoard, wrapR, wrapC)
+    elif newC==-1 and app.currNumPebbles>=0:
+        moveToPlayer2Home(app, app.predictBoard)
+    elif newC<0 and app.currNumPebbles>=0:
+        wrapR = 1
+        wrapC = abs(newC)%(6) - 2
+        movePebble(app, app.predictBoard, wrapR, wrapC)
+
+def timerFired(app):
+    if app.gameOver: return
+    if app.board[0][0]>24 or app.board[2][0]>24:
+        app.gameOver = True
+        if app.board[0][0]>app.board[2][0]:
+            app.winner = 2
+        else:
+            app.winner = 1
+    elif (app.board[1][0] == [0, 0, 0, 0, 0, 0] or 
+            app.board[1][1] == [0, 0, 0, 0, 0, 0]):
+        app.gameOver = True
+        determineWinner(app)
+    if app.player1MadeTurn:
+        takeTurnPlayer1(app, app.selectR, app.selectC)
+    elif app.player2MadeTurn:
+        takeTurnPlayer2(app, app.selectR, app.selectC)
+
+def determineWinner(app):
+    if (sum(app.board[1][0])+app.board[0][0] > 
+            sum(app.board[1][1])+app.board[2][0]):
+        app.winner = 2
+    else:
+        app.winner = 1
+
+def redrawAll(app, canvas):
+    drawGameInfo(app, canvas)
+    drawBoard(app, canvas)
+    drawGameOver(app, canvas)
+
+def getCellBounds(app, row, col):
+    cellsWidthStart = app.homeBoardWidth+app.margin 
+    cellsWidthEnd = app.width-app.margin-app.homeBoardWidth
+
+    cellsHeightStart = app.height/2
+    cellsHeightEnd = app.height/2+app.homeBoardHeight
+
+    cellWidth = (cellsWidthEnd-cellsWidthStart)/6
+    cellHeight = (cellsHeightEnd-cellsHeightStart)/2
+
+    x0 = cellsWidthStart+(col*cellWidth)
+    x1 = cellsWidthStart+((col+1)*cellWidth)
+    y0 = cellsHeightStart+(row*cellHeight)
+    y1 = cellsHeightStart+((row+1)*cellHeight)
+
+    return x0, y0, x1, y1
+
+def drawGameInfo(app, canvas):
+    canvas.create_text(app.width/2, app.height/5-20, 
+                        text="Press 'c' to activate computer mode", 
+                        font="Arial 20 bold")
+    canvas.create_text(app.width/2, app.height/4, 
+                        text="Mancala!", 
+                        font="Arial 40 bold")
+    canvas.create_text(app.width/2, app.height/3, 
+                    text=f'Current Player: player {app.currentPlayer}', 
+                    font="Arial 20 bold")
+
+    if app.inComputerMode: 
+        canvas.create_text(app.width/2, app.height*(4/5), 
+                        text=f'Computer Mode Activated', 
+                        font="Arial 20 bold")
+        if app.currentPlayer == 2:
+            canvas.create_text(app.width/2, app.height*(3/4), 
+                        text=f'Computer\'s Turn. Computer chose {app.selectC}', 
+                        font="Arial 20 bold")
+
+    if app.gameOver: return
+    if not app.player1MadeTurn and not app.player2MadeTurn:
+        canvas.create_text(app.width/2, app.height*(2/5), 
+                        text=f'Please select a cell to begin.', 
+                        font="Arial 20 bold")
+    else:
+        if app.zeroCellClick: 
+            canvas.create_text(app.width/2, app.height*(2/5), 
+                            text="Please select a non-zero cell", 
+                            font="Arial 20 bold")
+        elif app.takeAnotherTurn: 
+            canvas.create_text(app.width/2, app.height*(2/5), 
+                            text="Take another turn", 
+                            font="Arial 20 bold")
+        elif app.illegalRowClick: 
+            canvas.create_text(app.width/2, app.height*(2/5), 
+                            text="Please select a cell in the other row", 
+                            font="Arial 20 bold")
+        else:
+            canvas.create_text(app.width/2, app.height*(2/5), 
+                            text=f'Pebbles on hand: {app.currNumPebbles}', 
+                            font="Arial 20 bold")
+
+def drawGameOver(app, canvas):
+    if app.gameOver:
+        canvas.create_text(app.width/2, app.height*(2/5), 
+                        text="Game Over!", 
+                        font="Arial 20 bold")
+        if app.winner == 2:
+                # player 2 wins
+            canvas.create_text(app.width/2, app.height*(2/5)+30, 
+                            text="Player 2 wins", 
+                            font="Arial 20 bold")
+        elif app.winner == 1:
+                # player 1 wins
+            canvas.create_text(app.width/2, app.height*(2/5)+30, 
+                            text="Player 1 wins", 
+                            font="Arial 20 bold")
+        else:
+                # tie
+            canvas.create_text(app.width/2, app.height*(2/5)+30, 
+                            text="It's a tie", 
+                            font="Arial 20 bold")
+
+def drawBoard(app, canvas):
+    #app.board[0]
+    canvas.create_rectangle(app.margin, app.height/2, 
+                        app.homeBoardWidth+app.margin, 
+                        app.height/2+app.homeBoardHeight, 
+                        fill="orange")
+    canvas.create_text((app.margin+app.homeBoardWidth+app.margin)/2, 
+                    (app.height/2+app.height/2+app.homeBoardHeight)/2, 
+                    text=app.board[0], 
+                    font="Arial 20 bold")
+
+    # loop through actual inner list - app.board[1]
+    for row in range(len(app.board[1])):
+        for col in range(len(app.board[1][0])):
+            (x0, y0, x1, y1) = getCellBounds(app, row, col)
+            canvas.create_rectangle(x0, y0, x1, y1, fill="orange")
+            if row == app.selectR and col == app.selectC:
+                canvas.create_oval(x0, y0, x1, y1, fill="red")
+            else:
+                canvas.create_oval(x0, y0, x1, y1, fill="blue")
+            canvas.create_text((x0+x1)/2, (y0+y1)/2, 
+                                text=app.board[1][row][col], 
+                                font="Arial 20 bold")
+
+    # app.board[2]
+    canvas.create_rectangle(app.width-app.margin-app.homeBoardWidth, 
+                            app.height/2, app.width-app.margin, 
+                            app.height/2+app.homeBoardHeight, 
+                            fill="orange")
+    canvas.create_text((app.width-app.margin-app.homeBoardWidth
+                                                    +app.width-app.margin)/2, 
+                        (app.height/2+app.height/2+app.homeBoardHeight)/2, 
+                        text=app.board[2], 
+                        font="Arial 20 bold")
+
+runApp(width=600, height=600)
